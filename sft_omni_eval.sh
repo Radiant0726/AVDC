@@ -43,7 +43,7 @@ grad_accum_steps=4
 llm=""
 fi
 
-meta_dir=data/qwen_omni_ft/meta
+meta_dir=data
 output_dir=models/qwen2.5_omni_ft
 
 # Training arguments

@@ -1,0 +1,19 @@
+[
+  {
+    "data_path": "<video_path>",
+    "data_type": "video",
+    "output_contents": [
+      "<output_contents>"  
+    ],
+    "prompts": [
+      "<prompts>"
+    ],
+    "timestamps": [
+      ["<start_time>", "<end_time>"]
+    ],
+    "a_type": "caption",
+    "duration": 12.0,
+    "max_frames": 128,
+    "has_audio": true
+  }
+]
