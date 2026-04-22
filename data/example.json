@@ -9,7 +9,7 @@
       "<prompts>"
     ],
     "timestamps": [
-      ["<start_time>", "<end_time>"]
+      ["<start_time>", "<end_time>"] // will be add to the prompts, e.g. <start_time> to <end_time>: <prompts>. If not provided, the prompt will be applied to the whole video.
     ],
     "a_type": "caption",
     "duration": "<duration>",
