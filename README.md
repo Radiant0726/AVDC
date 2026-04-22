@@ -1,6 +1,6 @@
 <div align="center">
 <br>
-<h1>Empowering Long-form Omni-modal001 Understanding with Robust Audio Perception</h1>
+<h1>Empowering Long-form Omni-modal Understanding with Robust Audio Perception</h1>
 </div>
   
 We propose **AVDC (Audio-Visual Decoupled Captions)** dataset, a large-scale dataset designed to disentangle visual and auditory semantics, to improve omni understanding in multimodal models.
