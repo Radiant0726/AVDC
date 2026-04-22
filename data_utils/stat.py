@@ -9,10 +9,6 @@ import soundfile as sf
 def write_jsonl(path, item):
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(item, ensure_ascii=False) + "\n")
-        
-# video_bins = [0, 30, 60, 120, 300, 600, 1800, 10000]
-# question_bins = [0, 10, 50, 100, 200, 500, 2000]
-# answer_bins = [0, 10, 50, 100, 200, 500, 2000]
 
 video_bins = [0, 10, 20, 30, 40, 50, 61, 10000]
 question_bins = [0, 25, 50, 100, 200, 500, 2000]
@@ -35,7 +31,6 @@ def assign_bin(value, bins, labels):
         return labels[-1]
     return -1
 
-
 def get_video_duration_ffprobe(video_path):
     try:
         result = subprocess.run(
@@ -53,23 +48,15 @@ def get_video_duration_ffprobe(video_path):
         return None
 
 def get_video_duration_ffmpeg(file_path):
-    """
-    使用 ffmpeg 获取视频的时长（以秒为单位）。
-    :param file_path: 视频文件的路径
-    :return: 视频时长（秒），如果出错返回 None
-    """
-    # 构造 ffmpeg 命令
+
     command = [
         "ffmpeg", "-i", file_path,
-        "-f", "null", "-"  # 输出到空设备，不生成实际文件
+        "-f", "null", "-" 
     ]
 
     try:
-        # 执行命令并捕获输出
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-        # 解析 stderr 输出以获取时长信息
         output = result.stderr
-        # 查找 "Duration: HH:MM:SS.mmm" 这样的字符串
         duration_str = None
         for line in output.splitlines():
             if "Duration" in line:
@@ -77,16 +64,14 @@ def get_video_duration_ffmpeg(file_path):
                 break
 
         if duration_str:
-            # 将时长字符串转换为秒
             hours, minutes, seconds = map(float, duration_str.split(":"))
             total_seconds = hours * 3600 + minutes * 60 + seconds
             return total_seconds
         else:
-            print("未找到时长信息")
             return None
 
     except subprocess.CalledProcessError as e:
-        print(f"获取视频时长时出错: {e}")
+        print(f"error: {e}")
         return None
     
 def get_video_duration_decord(video_path):

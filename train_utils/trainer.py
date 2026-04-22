@@ -77,70 +77,15 @@ def get_cosine_schedule_with_warmup_and_min_lr(optimizer, num_warmup_steps, num_
     initial_lr = optimizer.defaults['lr']
     def lr_lambda(current_step):
         if current_step < num_warmup_steps:
-            # 线性 warmup，从 0 到 1
             return float(current_step + 1) / float(max(1, num_warmup_steps))
         else:
-            # 余弦衰减从 1 到 min_lr / initial_lr
+
             progress = float(current_step - num_warmup_steps + 1) / float(max(1, num_training_steps - num_warmup_steps))
             cosine_decay = 0.5 * (1.0 + math.cos(math.pi * progress))
-            # 缩放到 min_lr 的比例
             scaled_lr = cosine_decay * (1.0 - min_lr / initial_lr) + (min_lr / initial_lr)
             return scaled_lr
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
-
-class DistMemoryBank:
-    def __init__(self, feature_dim, bank_size=32, device="cuda"):
-        self.bank_size = bank_size
-        self.feature_dim = feature_dim
-        self.device = device
-        self.ptr = 0
-        self.filled = 0  # 当前 bank 已填充的数量
-        self.bank = torch.zeros(2, bank_size, feature_dim, device=device)
-
-    @torch.no_grad()
-    def update(self, features):
-        """
-        features: [2, B, D]
-        """
-        B = features.size(1)
-        if B > self.bank_size:
-            features = features[:, :self.bank_size, :]
-            B = self.bank_size
-
-        end = self.ptr + B
-        if end <= self.bank_size:
-            self.bank[:, self.ptr:end, :] = features
-        else:
-            first_len = self.bank_size - self.ptr
-            self.bank[:, self.ptr:, :] = features[:, :first_len, :]
-            self.bank[:, :end % self.bank_size, :] = features[:, first_len:, :]
-        self.ptr = (self.ptr + B) % self.bank_size
-        self.filled = min(self.bank_size, self.filled + B)  # 更新 filled
-
-    @torch.no_grad()
-    def get_memory(self):
-        """分布式同步 memory bank"""
-        if self.filled == 0:
-            return None
-        elif self.filled < self.bank_size:
-            return self.bank[:, :self.filled, :]
-            # return None
-        return self.bank
-    
-    # @torch.no_grad()
-    # def get_global(self):
-    #     """分布式同步 memory bank"""
-    #     if self.filled < self.bank_size:
-    #         return None
-    #     if not dist.is_initialized():
-    #         return self.bank.clone().detach()
-    #     world_size = dist.get_world_size()
-    #     local_bank = self.bank.clone()
-    #     global_bank_list = [torch.zeros_like(local_bank) for _ in range(world_size)]
-    #     dist.all_gather(global_bank_list, local_bank)
-    #     return torch.cat(global_bank_list, dim=1).detach()  # [2, bank_size*world_size, D]
-    
 class CustomTrainer(Trainer):
     def __init__(self, *args, min_lr=0, processor=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -150,8 +95,6 @@ class CustomTrainer(Trainer):
 
     def create_optimizer_and_scheduler(self, num_training_steps):
         self.optimizer = AdamW(self.model.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
-
-        # 用你自定义的调度器，并传入 self.min_lr
         self.lr_scheduler = get_cosine_schedule_with_warmup_and_min_lr(
             optimizer=self.optimizer,
             num_warmup_steps=self.args.warmup_steps,

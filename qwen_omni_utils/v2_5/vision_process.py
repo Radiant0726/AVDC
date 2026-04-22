@@ -365,15 +365,12 @@ def _read_video_decord_second(ele: dict) -> (torch.Tensor, float, list):
 
     while len(idx) % FRAME_FACTOR != 0:
         idx.pop(-1)
-    # if len(idx) % FRAME_FACTOR != 0:
-    #     idx.append(end_frame)
 
-    sample_fps = target_fps # (len(idx) - 1) / max(times[-2] - start_time, 1e-6)
+    sample_fps = target_fps 
 
     video = vr.get_batch(idx).asnumpy()
     video = torch.tensor(video).permute(0, 3, 1, 2)  # TCHW
 
-    # sample_fps = len(idx) / max(end_time - start_time, 1e-6)
     video_timestamps = list(np.array(idx) / video_fps)
 
     logger.info(

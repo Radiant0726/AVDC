@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*
 import os
-# os.environ["HF_ENDPOINT"] = "https://hf-mirror.com" 
-# os.environ["http_proxy"] = "http://172.16.6.134:12607"
-# os.environ["https_proxy"] = "http://172.16.6.134:12607"
 from pathlib import Path
 curr_dir = Path(__file__).resolve().parent
 root_dir = Path(__file__).resolve().parent.parent
 import sys
 sys.path.insert(0, str(Path(curr_dir))) 
 sys.path.insert(0, str(Path(root_dir))) 
-# sys.path.insert(0, str(Path("/home/kaiyingyan/qwen2.5_omni_ft/transformers/src")))
 
 import argparse
 import random
@@ -20,7 +16,6 @@ import torch.nn.functional as F
 import json
 import pandas as pd
 from datasets import Dataset, load_dataset
-# from modelscope import snapshot_download, AutoTokenizer
 import transformers
 from transformers import DataCollatorForSeq2Seq
 from func_timeout import func_set_timeout, FunctionTimedOut
@@ -68,7 +63,6 @@ class DataCollatorForSeq2Seq_videos(DataCollatorForSeq2Seq):
         label_pad_token_id: int = -100,
         return_tensors: str = "pt",
     ):
-        # 调用父类的构造函数
         super().__init__(
             tokenizer=tokenizer,
             model=model,
@@ -81,21 +75,12 @@ class DataCollatorForSeq2Seq_videos(DataCollatorForSeq2Seq):
 
     def __call__(self, features, return_tensors=None):
 
-        # images = []
         videos = []
-        # video_token_indices = []
-        # audio_token_indices = []
         multi_keys = ["labels", "input_ids", "attention_mask"] #
-        # single_keys = ["input_features", "feature_attention_mask", "pixel_values", "pixel_values_videos"]
         features_lst = []  
         num_qa_lst = []
         for item in features:
-            # images.append(torch.tensor(item.pop("pixel_values"))) # list -> tensor
             videos.append(torch.tensor(item.pop("pixel_values_videos")).squeeze(0)) # list -> tensor
-            # video_token_indices.append(torch.tensor(item.pop("video_token_indices")).squeeze(0))
-            # audio_token_indices.append(torch.tensor(item.pop("audio_token_indices")).squeeze(0))
-
-            # assert item["attention_mask"].shape[0] == item["labels"].shape[0]
             num_qa = item.pop("num_qa")
             num_qa_lst.append(num_qa)
             for idx in range(num_qa):
@@ -109,46 +94,21 @@ class DataCollatorForSeq2Seq_videos(DataCollatorForSeq2Seq):
                         else: item_one[key] = value.item()
                 features_lst.append(item_one)
 
-        # images = max_pad_seq(images,value=0)[0]
         videos = max_pad_seq(videos, value=0)[0]
-        # video_token_indices = max_pad_seq(video_token_indices, value=-1)[0]
-        # audio_token_indices = max_pad_seq(audio_token_indices, value=-1)[0]
 
-        # 调用父类的 __call__ 方法
-        # batch = super().__call__(features, return_tensors)
         batch = super().__call__(features_lst, return_tensors)
 
         for key, value in batch.items():
             split_values = torch.split(value, num_qa_lst, dim=0)
             if key in multi_keys:
                 pass
-                # # 先按num_qa拆分，再拼接
-                # batch[key] = torch.stack(split_values, dim=0)
             else:
                 batch[key] = torch.stack([split_value[0] for split_value in split_values], dim=0)
 
-        # batch["pixel_values"] = images
         batch["pixel_values_videos"] = videos
-        # batch["video_token_indices"] = video_token_indices
-        # batch["audio_token_indices"] = audio_token_indices
         batch["num_qa"] = torch.tensor(num_qa_lst)
 
         return batch
-
-# def check_av_len(inputs):
-#     second_per_grid_ts = inputs["second_per_grid_ts"][0]
-#     audio_timestamps = inputs["audio_timestamps"][0]
-#     video_grid_thw = inputs["video_grid_thw"][0]
-#     video_t = video_grid_thw[0]
-#     audio_t = torch.max(audio_timestamps) // second_per_grid_ts if second_per_grid_ts!=0 else 0
-
-#     # if audio_t-video_t>=0 and audio_t-video_t<=1:
-#     if abs(audio_t-video_t)<=1:
-#         flag = True
-#     else:
-#         flag = False
-    
-#     return flag, video_t, audio_t
 
 def left_pad_tensor(input_lst, target_len, pad_value = 0):
     
@@ -165,20 +125,16 @@ def left_pad_tensor(input_lst, target_len, pad_value = 0):
     while len(padded) < target_len:
         padded.append([pad_value] * max_len)
 
-    # 现在 padded 是一个 list of lists，长度都是 max_len
     tensor = torch.tensor(padded)  # shape [batch_size, max_len]
     return tensor
 
-@func_set_timeout(180)  # 设置超时
+@func_set_timeout(180)  
 def prepare_inputs(messages, has_audio, text, processor):
-    # audios, images, videos = process_mm_info(messages, use_audio_in_video=USE_AUDIO_IN_VIDEO)
-    # audios, images, videos, video_sample_args = process_mm_info(messages, use_audio_in_video=USE_AUDIO_IN_VIDEO, return_video_kwargs=True)
     audios, images, videos, video_sample_args = process_mm_info(messages, use_audio_in_video=has_audio, return_video_kwargs=True)
     inputs = processor(text=text, audio=audios, images=images, videos=videos, return_tensors="pt", padding=True, use_audio_in_video=has_audio, **video_sample_args)
     return inputs
 
-# NUM_TIMESTAMPS_SAMPLE = 3
-# NUM_TIMESTAMPS_SAMPLE = 1
+NUM_TIMESTAMPS_SAMPLE = 3
 def process_func(data_path, data_type, timestamps, 
                 prompts, output_contents, a_type, duration, has_audio, crop_range,
                 processor, tokenizer, mode, **kwargs):
@@ -189,12 +145,6 @@ def process_func(data_path, data_type, timestamps,
     system_content = []
     content = []
 
-    # if duration < 20:
-    #     CURR_NUM_TIMESTAMPS_SAMPLE = 2
-    # else:
-    #     CURR_NUM_TIMESTAMPS_SAMPLE = 1
-
-    # fps = 1.0
     if duration < 30:
         fps = 2.0
     else:
@@ -311,61 +261,24 @@ Enclose your reasoning process within <think>...</think> and enclose your final 
     
     qa_messages = []
     if timestamps[0]==[]:
-        qa_messages.append(qa_contents[0]) # 全局
-        qa_contents = qa_contents[1:] # 局部
+        qa_messages.append(qa_contents[0])
+        qa_contents = qa_contents[1:] 
 
 
-    if len(qa_contents) > 0: # 局部
+    if len(qa_contents) > 0:
         random.shuffle(qa_contents)
         qa_contents_time = qa_contents[0]
         qa_messages.append(qa_contents_time)
-    # CURR_NUM_TIMESTAMPS_SAMPLE = CURR_NUM_TIMESTAMPS_SAMPLE - len(qa_messages) 
-    # if CURR_NUM_TIMESTAMPS_SAMPLE > 0:
-    #     sample_num = min(CURR_NUM_TIMESTAMPS_SAMPLE, len(qa_contents)) # 2 if duration < 30 else 1
-
-    #     if sample_num > 0: # 局部
-    #         if len(qa_contents) > sample_num:
-    #             qa_contents_idx = random.sample(list(range(len(qa_contents))), sample_num) # sample some qa
-    #             qa_contents = [qa for i, qa in enumerate(qa_contents) if i in qa_contents_idx]
-            
-    #         for qa_item in qa_contents:
-    #             qa_messages.append(qa_item)
-
-    # num_qa = len(qa_messages)
-    # for qa in qa_messages:
-    #     messages.extend(qa)
 
     num_qa = 1
     random.shuffle(qa_messages)
     messages.extend(qa_messages[0])
-    
-    # if timestamps is not None:
-    #     label_timestamps = [t for i, t in enumerate(timestamps) if i in qa_contents_idx]
-    # else:
-    #     label_timestamps = [[-1,-1] for i in range(len(qa_contents_idx))]
 
-    # target = [
-    #     {
-    #         "role": "assistant",
-    #         "content": output_content
-    #     }
-    # ]
 
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     ) 
 
-    # tokenizer = copy.deepcopy(tokenizer)
-    # chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
-    # tokenizer.chat_template = chat_template
-
-    # response = tokenizer.apply_chat_template(target)
-    # response_label = copy.deepcopy(response)
-    # response_label[:3] = [-100] * 3  # 去除模板前缀
-    # response = tokenizer(f"{output_content}", add_special_tokens=False)
-
-    # for test
-    # inputs = prepare_inputs(messages, has_audio, text, processor)
     try:
         inputs = prepare_inputs(messages, has_audio, text, processor)
         inputs["use_audio_in_video"] = has_audio
@@ -375,14 +288,6 @@ Enclose your reasoning process within <think>...</think> and enclose your final 
     except Exception as e:
         print(f"[Error] prepare_inputs failed with exception: {e}, skip sample ({data_path}, {data_type})")
         return None
-    # image_inputs, video_inputs = process_vision_info(messages) 
-    # inputs = processor(text=[text],images=image_inputs,videos=video_inputs,padding=True,return_tensors="pt")
-
-    # if video_path:
-    #     flag_avlen, video_t, audio_t = check_av_len(inputs)
-    #     if not flag_avlen:
-    #         print(f"[Error] video(len={video_t}) and audio(len={audio_t}) are not same len, skip sample ({video_path}, {audio_path})")
-    #         return None
 
     instruction = {key: value.tolist() for key, value in inputs.items() if isinstance(value,torch.Tensor)} #tensor -> list,为了方便拼接
 
@@ -390,14 +295,12 @@ Enclose your reasoning process within <think>...</think> and enclose your final 
     # "151645": "<|im_end|>"
     input_ids = instruction["input_ids"][0] 
     im_start_idx = [index for index, value in enumerate(input_ids) if value == 151644]
-    # im_end_idx = [index for index, value in enumerate(input_ids) if value == 151645]
-    
+
     omni_im_start_idx = im_start_idx[-1]
     answer_perdix_len = 3 # <|im_start|>assistant\n
     input_ids = input_ids[:omni_im_start_idx]
 
     im_start_idx = im_start_idx[2:]
-    # im_end_idx = im_end_idx[2:]
     qa_start_idx = im_start_idx[0]
 
     all_labels = []
@@ -405,13 +308,12 @@ Enclose your reasoning process within <think>...</think> and enclose your final 
     all_attention_masks = []
     input_ids_av = input_ids[:qa_start_idx]
     attention_mask = instruction["attention_mask"][0][:qa_start_idx]
-    # qa_attention_mask = [0] * (len(input_ids) - qa_start_idx)
-    # attention_mask = attention_mask + qa_attention_mask
+
     labels = [-100] * len(attention_mask) 
     for num in range(num_qa):
         q_start_idx = im_start_idx[2 * num]
         a_start_idx = im_start_idx[2 * num + 1] + answer_perdix_len
-        next_q_start_idx = im_start_idx[2 * num + 2] # 加入 "\n"
+        next_q_start_idx = im_start_idx[2 * num + 2] 
 
         curr_attention_mask = copy.deepcopy(attention_mask)
         curr_labels = copy.deepcopy(labels)
@@ -438,22 +340,9 @@ Enclose your reasoning process within <think>...</think> and enclose your final 
 
         assert len(curr_labels) == len(curr_attention_mask) == len(curr_input_ids), f"label, attention_mask and input_ids length mismatch: {len(labels)}, {len(curr_attention_mask)}, {len(input_ids)}"
 
-
-    # max length限制 太长了舍弃
-    # if mode=="train" and len(input_ids) > TOTAL_MAX_LENGTH:  
-    #     return None
-        # input_ids = input_ids[:MAX_LENGTH] # 做一个截断
-        # attention_mask = attention_mask[:MAX_LENGTH]
-        # labels = labels[:MAX_LENGTH]
-
-    # input_ids = torch.tensor(all_input_ids)
-    # attention_mask = torch.tensor(all_attention_masks)
-    # labels = torch.tensor(all_labels)
-
     input_ids = left_pad_tensor(all_input_ids, NUM_TIMESTAMPS_SAMPLE, -101)
     attention_mask = left_pad_tensor(all_attention_masks, NUM_TIMESTAMPS_SAMPLE, -101)
     labels = left_pad_tensor(all_labels, NUM_TIMESTAMPS_SAMPLE, -101)
-    # label_timestamps = torch.tensor(label_timestamps)
 
     print(data_path, data_type, duration, len(input_ids), len(input_ids[0]))
     assert input_ids.shape == attention_mask.shape == labels.shape
@@ -463,7 +352,7 @@ Enclose your reasoning process within <think>...</think> and enclose your final 
             inputs[key] = value.squeeze(0)
     
     inputs.update({"input_ids": input_ids, "attention_mask": attention_mask, 
-                   "labels": labels, # "label_timestamps":label_timestamps,
+                   "labels": labels,
                    "num_qa": num_qa})
     
     return inputs
@@ -525,13 +414,6 @@ def create_dataset(data_args, processor, tokenizer,do_eval=False):
         val_dataset = val_ds.map(process_func_batch, 
                         batched=True, batch_size=load_batch_size, remove_columns=columns,
                         fn_kwargs={"processor": processor, "tokenizer": tokenizer, "mode":"val"})     
-    # if "test" in dataset_split_paths.keys():            
-    #     test_ds = load_dataset("json", data_files={"test": dataset_split_paths["test"]}, 
-    #                             streaming=False, cache_dir=f"{data_cache_dir}/test")["test"]           
-
-    #     test_dataset = test_ds.map(process_func_batch, 
-    #                     batched=True, batch_size=load_batch_size, remove_columns=columns,
-    #                     fn_kwargs={"processor": processor, "tokenizer": tokenizer})    
 
     dataset = {
         "train":train_dataset,

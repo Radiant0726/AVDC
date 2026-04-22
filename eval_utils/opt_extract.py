@@ -16,11 +16,11 @@ def extract_mcq_answer(response: str) -> str:
     match = re.search(pattern, response, re.DOTALL)
     if match:
         response = match.group(1).strip()
-    # 匹配形如 "answer is X" 或单独 "(X)" 的结论，忽略大小写
+
     match = re.search(r'answer(?: is|:)?\s*([A-E])(?![a-zA-Z])', response, flags=re.IGNORECASE)
     if match:
         return match.group(1).upper()
-    # 从头开始找大写字母
+
     match = re.search(r'(?<![a-zA-Z])[A-E](?![a-zA-Z])', response)
     if match:
         return match.group()

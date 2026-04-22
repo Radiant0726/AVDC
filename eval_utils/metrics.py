@@ -1,18 +1,18 @@
 import os
-os.environ["http_proxy"] = "http://10.20.112.35:3143"
-os.environ["https_proxy"] = "http://10.20.112.35:3143"
-
 import re
 import copy
 import torch
 import numpy as np
 import json
 import evaluate
-from transformers import AutoTokenizer, AutoModel
 
 from typing import List, Dict, Tuple
 from collections import defaultdict, Counter
+import torch
 import torch.nn.functional as F
+
+from transformers import GPT2LMHeadModel, GPT2Tokenizer, AutoTokenizer, AutoModel
+
 import nltk
 from nltk.util import ngrams
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
@@ -26,27 +26,19 @@ try:
 except:
     from cider.cidereval.scorers import ciderR
 
-# nltk.download('punkt')
-# nltk.download('wordnet', download_dir='/mnt/vision_user/kaiyinyan/nltk_data')
+
 nltk.data.path.append('/mnt/vision_user/kaiyinyan/nltk_data')
 try:
     from .loc_metrics import *
 except:
     from loc_metrics import *
 
-# test
-predictions = ["A. the cat is on the mat","the cat is on the mat","the cat is on the mat","the cat is on the mat"]
-references = ["the cat is on a mat","the cat is on the mat","the cat is on the mat","the cat is on the mat",]
-
 def preprocess_logits_for_metrics(logits, labels):
 
     pred_ids = torch.argmax(logits[0], dim=-1)
     return pred_ids, labels
 
-# LLM解码器
 tokenizer = AutoTokenizer.from_pretrained("/mnt/vision_user/kaiyinyan/models/Qwen2.5-Omni-7B", use_fast=False, trust_remote_code=True)
-test_text = "Upon watching the video, the sequence of events and the multimodal content can be summarized as follows:\n\n1. **Initial Scene (0s - 1.97s):**\n   - The video begins with a close-up shot of a hand interacting with a zipper on a piece of fabric. The hand is seen pulling the zipper, indicating the opening or closing of a bag or a similar item. The fabric appears to be part of a larger structure, possibly a tent or a sleeping bag, given the context of the subsequent scenes.\n\n2. **Scene Transition (1.97s - 5.97s):**\n   - The camera shifts to a wider view, revealing a person inside a tent. The person is lying on a bed, which is covered with a red and black sleeping bag. The tent is well-lit, suggesting it is daytime. The person appears to be adjusting the sleeping bag or preparing for sleep. The tent is equipped with a pillow and a sleeping pad, indicating a comfortable camping setup.\n\n3. **Scene Transition (5.97s - 9.98s):**\n   - The camera focuses on the person's hand as they interact with the zipper again. This time, the zipper is on a different piece of fabric, possibly a sleeping bag or a tent door. The hand is seen pulling the zipper, suggesting the person is either opening or closing the zipper. The fabric is dark, and the zipper is metallic, indicating a sturdy construction.\n\n4. **Scene Transition (9.98s - 13.99s):**\n   - The camera shifts to a wider view of the tent interior. The person is now seen lying on a bed, which is covered with a red and black sleeping bag. The tent is well-lit, and the person appears to be adjusting the sleeping bag or preparing for sleep. The tent is equipped with a pillow and a sleeping pad, indicating a comfortable camping setup.\n\n5. **Scene Transition (13.99s - 20s):**\n   - The camera focuses on the person's hand as they interact with the zipper again. This time, the zipper is on a different piece of fabric, possibly a sleeping bag or a tent door. The hand is seen pulling the zipper, suggesting the person is either opening or closing the zipper. The fabric is dark, and the zipper is metallic, indicating a sturdy construction.\n\n6. **Scene Transition (20s - 25.97s):**\n   - The camera shifts to a wider view of the tent interior. The person is now seen lying on a bed, which is covered with a red and black sleeping bag. The tent is well-lit, and the person appears to be adjusting the sleeping bag or preparing for sleep. The tent is equipped with a pillow and a sleeping pad, indicating a comfortable camping setup.\n\n7. **Scene Transition (25.97s - 32s):**\n   - The camera focuses on the person's hand as they interact with the zipper again. This time, the zipper is on a different piece of fabric, possibly a sleeping bag or a tent door. The hand is seen pulling the zipper, suggesting the person is either opening or closing the zipper. The fabric is dark, and the zipper is metallic, indicating a sturdy construction.\n\n8. **Scene Transition (32s - 44s):**\n   - The camera shifts to a wider view of the tent interior. The person is now seen lying on a bed, which is covered with a red and black sleeping bag. The tent is well-lit, and the person appears to be adjusting the sleeping bag or preparing for sleep. The tent is equipped with a pillow and a sleeping pad, indicating a comfortable camping setup.\n\n9. **Scene Transition (44s - 48s):**\n   - The camera focuses on the person's hand as they interact with the zipper again. This time, the zipper is on a different piece of fabric, possibly a sleeping bag or a tent door. The hand is seen pulling the zipper, suggesting the person is either opening or closing the zipper. The fabric is dark, and the zipper is metallic, indicating a sturdy construction.\n\n10. **Final Scene (48s - 52s):**\n    - The camera shifts to a wider view of the tent interior. The person is now seen lying on a bed, which is covered with a red and black sleeping bag. The tent is well-lit, and the person appears to be adjusting the sleeping bag or preparing for sleep. The tent is equipped with a pillow and a sleeping pad, indicating a comfortable camping setup.\n\nIn summary, the video depicts a person preparing for sleep inside a tent. The sequence of events includes close-up shots of the person interacting with zippers on various pieces of fabric, likely sleeping bags or tent doors. The person is seen lying on a bed covered with a red and black sleeping bag, adjusting the sleeping bag and preparing for sleep."
-inputs = tokenizer(test_text)
 
 def round_metric_dict(metric_dict):
     for key, value in metric_dict.items():
@@ -59,13 +51,6 @@ def cider_score_fn(predictions, references):
     scoreD = ciderD(predictions=predictions, references=references, df="corpus")['avg_score'].item()
     scoreR = ciderR(predictions=predictions, references=references)['avg_score'].item()
     return {"cider":score, "ciderD":scoreD, "ciderR": scoreR}
-# 示例
-# cider_results = cider_score_fn(predictions=predictions, references=[[ref] for ref in references])
-# print(cider_results)
-
-# meteor_results = [meteor_score_fn([ref.split()], pred.split()) for ref, pred in zip(references,predictions)]
-# meteor_results = sum(meteor_results) / len(meteor_results)
-# print(meteor_results)
 
 def repeat_metrics(text, n=3):
     if isinstance(text, str):
@@ -77,12 +62,12 @@ def repeat_metrics(text, n=3):
     for text in text_lst:
         tokens = re.findall(r'\b\w+\b', text.lower())
         N = len(tokens)
-        # A. 重复词占比
+
         cnt = Counter(tokens)
         R_w = sum(v for k,v in cnt.items() if v>1) / N if N else 0
-        # B. 相邻重复
+
         R_adj = sum(t1==t2 for t1,t2 in zip(tokens, tokens[1:])) / (N-1) if N>1 else 0
-        # C. 冗余 n-gram
+
         def r_ngram(n):
             grams = [' '.join(tokens[i:i+n]) for i in range(len(tokens)-n+1)]
             c = Counter(grams)
@@ -96,11 +81,7 @@ def repeat_metrics(text, n=3):
 
     return results
 
-results_repeat = repeat_metrics("This is a grammatically correct sentence.")
-
-
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
-import torch
+# results_repeat = repeat_metrics("This is a grammatically correct sentence.")
 
 model_name = "/mnt/vision_user/kaiyinyan/models/gpt2"
 GPT2model = GPT2LMHeadModel.from_pretrained(model_name).cuda()
@@ -124,7 +105,7 @@ def perplexity_sliding_window(text, stride=512, max_len=512):
         trg_len   = end_loc - i
         input_ids = toks[begin_loc:end_loc].unsqueeze(0)
         target_ids = input_ids.clone()
-        target_ids[:, :-trg_len] = -100          # 只留当前窗口的预测部分
+        target_ids[:, :-trg_len] = -100    
         with torch.no_grad():
             loss = GPT2model(input_ids, labels=target_ids).loss
         nlls.append(loss * trg_len)
@@ -141,40 +122,25 @@ def perplexity_batch(texts):
         total_loss = total_loss + loss
     return total_loss / len(texts)
 
-score = perplexity_sliding_window("This is a grammatically correct sentence.")
-print(score)
+# score = perplexity_sliding_window("This is a grammatically correct sentence.")
+# print(score)
 
 
 class OmniEvaluator:
     def __init__(self):
-        """
-        初始化各种评估指标
-        """
-        # 加载评估器
-        # self.accuracy = evaluate.load("accuracy")
-        # self.f1 = evaluate.load("f1")
-        # self.bleu = evaluate.load('bleu')
-        # self.rouge = evaluate.load('rouge')
-        # self.meteor = evaluate.load('meteor')
-        # self.bertscore = evaluate.load('bertscore')
-        # self.BertScoreEvaluator = BertScoreEvaluator(device="cuda:7")
+        pass
 
     def extract_mcq_answer(self, response: str) -> str:
-        """
-        从 文本中提取选择题答案
-        """
         # pattern = r'<answer>(.*?)</answer>'
         pattern = r'answer>(.*?)</answer'
         match = re.search(pattern, response, re.DOTALL)
         if match:
             response = match.group(1).strip()
 
-        # 匹配形如 "answer is X" 或单独 "(X)" 的结论，忽略大小写
         match = re.search(r'answer(?: is|:)?\s*([A-E])(?![a-zA-Z])', response, flags=re.IGNORECASE)
         if match:
             return match.group(1).upper()
         
-        # 从头开始找大写字母
         match = re.search(r'(?<![a-zA-Z])[A-E](?![a-zA-Z])', response)
         if match:
             return match.group()
@@ -189,7 +155,7 @@ class OmniEvaluator:
 
     # Helper function to extract intervals from the string
     def extract_count_timestamps(self, time_str):
-        # 提取 Count
+
         m = re.search(r"Count\s*:\s*(\d+)", time_str)
         count = int(m.group(1)) if m else None
         # Use regex to extract intervals of the form "from X to Y"
@@ -238,22 +204,10 @@ class OmniEvaluator:
     def compute_caption_metrics(self, 
                        predictions: List[str], 
                        references: List[str]) -> Dict[str, float]:
-        """
-        计算所有评估指标
-        
-        参数：
-        predictions: 生成的caption列表
-        references: 参考caption列表的列表（每个样本可以有多个参考）
-        
-        返回：
-        包含所有指标的字典
-        """
-
         assert len(predictions) == len(references), "Prediction and reference lists must be the same length"
 
         metrics = {}
         
-        # 计算BLEU分数 (BLEU-1到BLEU-4)
         # for n in [1, 2, 3, 4]:
         #     bleu_score = self.bleu.compute(
         #         predictions=predictions_caption,
@@ -262,7 +216,6 @@ class OmniEvaluator:
         #     )
         #     metrics[f'bleu_{n}'] = bleu_score['bleu']
         
-        # 计算ROUGE分数
         # rouge_scores = self.rouge.compute(
         #     predictions=predictions_caption,
         #     references=references_caption, 
@@ -279,7 +232,6 @@ class OmniEvaluator:
         #     'rougeLsum': rouge_scores['rougeLsum'].item()
         # })
         
-        # 计算METEOR分数
         # meteor_score = self.meteor.compute(
         #     predictions=predictions_caption,
         #     references=references_caption  
@@ -289,7 +241,6 @@ class OmniEvaluator:
         meteor_score_lst = [meteor_score_fn([ref.split()], pred.split()) for ref, pred in zip(references, predictions)]
         metrics['meteor'] = sum(meteor_score_lst) / len(meteor_score_lst)
 
-        # 计算CIDEr分数
         cider_scores = cider_score_fn(
             predictions, [[ref] for ref in references]
         )
@@ -314,24 +265,19 @@ class OmniEvaluator:
         label_data = [pred_labels, ref_labels]
 
         all_labels = set(ref_labels + pred_labels)
-        label_list = sorted(all_labels)  # 或保留顺序：list(dict.fromkeys([...]))
+        label_list = sorted(all_labels)  
         label2id = {label: idx for idx, label in enumerate(label_list)}
 
         pred_ids = [label2id[label] for label in pred_labels]
         ref_ids = [label2id[label] for label in ref_labels]
 
-        # 假设 pred_ids 和 ref_ids 是两个长度相同的列表
         assert len(pred_ids) == len(ref_ids), "Prediction and reference lists must be the same length"
 
         results = {}
 
-        # 计算正确预测的数量
         correct = sum(p == r for p, r in zip(pred_ids, ref_ids))
-        # 计算准确率
         accuracy = correct / len(pred_ids)
         results["accuracy"] = accuracy
-
-        # results = self.accuracy.compute(predictions=pred_ids, references=ref_ids)
 
         return results, label_data
     
@@ -381,15 +327,15 @@ def compute_metrics_save(experiment_name, root_output_dir):
         label_ids = eval_pred.label_ids
         pred_ids = eval_pred.predictions
         
-        mask = (label_ids == -100) # 获取无效标签的位置（填充标记）
+        mask = (label_ids == -100) 
         label_ids[mask] = tokenizer.pad_token_id
 
-        pred_mask = (pred_ids == -100) # 获取无效标签的位置（填充标记）
+        pred_mask = (pred_ids == -100) 
         pred_ids[pred_mask] = tokenizer.pad_token_id
 
         # 验证mask
-        assert not np.any(label_ids == -100), "labels 包含 -100"
-        assert not np.any(pred_ids == -100), "preds 包含 -100"
+        assert not np.any(label_ids == -100), "labels include -100"
+        assert not np.any(pred_ids == -100), "preds include -100"
 
         # decode
         decoded_preds = tokenizer.batch_decode(pred_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False) # list[str]
@@ -459,8 +405,6 @@ def compute_metrics_save(experiment_name, root_output_dir):
                 metrics["acc_mAP"] = metrics["accuracy"] + metrics["mAP"]
             else:
                 metrics["ciderD_meteor_mAP"] = (metrics["ciderD"] + metrics["meteor"])/2 + metrics["mAP"]
-
-
 
         return metrics
     
